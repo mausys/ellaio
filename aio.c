@@ -46,12 +46,16 @@ struct l_aio_request {
 
 struct l_aio {
   io_context_t ctx;
-  struct l_io *io;
+  struct l_io *evfd;
 };
+
 
 bool event_callback(struct l_io *io, void *user_data)
 {
   struct l_aio * aio = user_data;
+
+  uint64_t c;
+  read(l_io_get_fd(aio->evfd), &c, sizeof(c));
 
   static struct timespec timeout = { 0, 0 };
   struct io_event event;
@@ -72,6 +76,7 @@ bool event_callback(struct l_io *io, void *user_data)
   return true;
 }
 
+
 struct l_aio * l_aio_create(int maxevents)
 {
   struct l_aio *aio = l_new(struct l_aio, 1);
@@ -85,16 +90,15 @@ struct l_aio * l_aio_create(int maxevents)
   if (evfd < 0)
     goto error_event;
 
-  aio->io = l_io_new(evfd);
+  aio->evfd = l_io_new(evfd);
 
-  if (!l_io_set_read_handler(aio->io, event_callback, aio, NULL))
+  if (!l_io_set_read_handler(aio->evfd, event_callback, aio, NULL))
     goto error_handler;
 
   return aio;
 
 error_handler:
-  close(evfd);
-  l_free(aio->io);
+  l_free(aio->evfd);
 error_event:
   io_destroy(aio->ctx);
 error_init:
@@ -115,7 +119,7 @@ int l_aio_read(struct l_aio *aio, l_aio_cb_t read_cb, int fd, long long offset,
   struct iocb *iocbv[] = { iocb };
 
   io_prep_pread(iocb, fd, buffer, count, offset);
-  io_set_eventfd(iocb, l_io_get_fd(aio->io));
+  io_set_eventfd(iocb, l_io_get_fd(aio->evfd));
   iocb->data = req;
 
   return io_submit(aio->ctx, 1, iocbv);

@@ -93,6 +93,7 @@ struct l_aio * l_aio_create(int maxevents)
   return aio;
 
 error_handler:
+  close(evfd);
   l_free(aio->io);
 error_event:
   io_destroy(aio->ctx);
